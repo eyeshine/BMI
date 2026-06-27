@@ -1,17 +1,17 @@
 # ==========================================
-# 專案名稱：自製BMI健康管理程式 (Windows UI 專案版)
-# 目的：提供自主學習成果報告之系統實作，具備圖形化資料選取、資料視覺化與多格式存取功能
+# 專案名稱：自製BMI健康管理程式 (無 Plotly 本地版)
+# 目的：移除 Plotly 依賴，改用 Streamlit 原生圖表與 Matplotlib 繪製儀表板
 # ==========================================
 
 # ------------------------------------------
 # 1. 匯入開發所需之標準函式庫與外部套件
 # ------------------------------------------
-import streamlit as st          # 目的：構建現代化、響應式的 Windows 本地端網頁 GUI 介面
+import streamlit as st          # 目的：建構現代化、響應式的 Windows 本地端網頁 GUI 介面
 import pandas as pd             # 目的：高效處理與轉換二維表格數據，方便繪圖與匯出檔案
 import json                     # 目的：處理 JSON 格式的序列化與反序列化，用於完整保存與讀取專案
 import os                       # 目的：處理檔案系統路徑（如路徑合併、目錄存在檢查）
 from datetime import datetime   # 目的：取得當前系統時間，用於自動生成絕不重複的檔名
-import plotly.express as px     # 目的：繪製具備高度互動性與美觀的儀表板圖表
+import matplotlib.pyplot as plt # 目的：用於替代 Plotly 繪製體態比例分佈圖（圓餅圖）
 
 # 理由：在 Windows 本地運行時，Tkinter 能夠直接喚醒系統原生的「資料夾選取」與「檔案選取」對話框
 import tkinter as tk
@@ -31,7 +31,7 @@ if 'selected_file' not in st.session_state:
     st.session_state['selected_file'] = ""  # 用途：記錄當前選定要讀取的專案檔案路徑
 
 # ------------------------------------------
-# 3. 定義 Windows 原生對話框呼叫函式 (Tkinter 整合)
+# 3. 定義 Windows 原生對話框呼死函式 (Tkinter 整合)
 # ------------------------------------------
 def select_folder_via_dialog():
     """
@@ -64,7 +64,7 @@ def select_file_via_dialog():
             master=root,
             filetypes=[("JSON 專案檔", "*.json")]
         )
-        root.destroy()
+        root.destroy()  # 銷毀視窗
         return file_path
     except Exception as e:
         return None
@@ -209,7 +209,7 @@ with tab1:
                 label_visibility="collapsed"
             )
         with col_file_btn:
-            # 理由：符合「讀起檔案也是用選擇檔案的方式」
+            # 理由：符合「讀取檔案也是用選擇檔案的方式」
             if st.button("🔍 瀏覽檔案...", use_container_width=True):
                 chosen_file = select_file_via_dialog()
                 if chosen_file:
@@ -271,7 +271,7 @@ with tab1:
 # TAB 2：趨勢儀表板與健康建議
 # ==========================================
 with tab2:
-    st.subheader("📊 歷史健康數據 Dashboard")
+    st.subheader("📊 歷史健康數據 Dashboard (標準圖表)")
     
     # 理由：若無資料，繪圖引擎會報錯，故以條件式分支提示使用者先登錄數據
     if not st.session_state['bmi_history']:
@@ -301,28 +301,20 @@ with tab2:
         
         with col_c1:
             st.write("**📈 BMI 趨勢分析 (BMI 變化曲線)**")
-            fig_bmi_line = px.line(
-                df_plot, 
-                x='Date', 
-                y='BMI', 
-                title='BMI 歷史起伏曲線',
-                labels={'Date': '時間', 'BMI': 'BMI 數值'},
-                markers=True  # 理由：強制顯示數據點，避免只有單一數據時折線圖無法呈點
-            )
-            st.plotly_chart(fig_bmi_line, use_container_width=True)
+            # 理由：為配合移除 Plotly 的要求，我們使用 Streamlit 的原生 st.line_chart 元件。
+            # 為了讓 X 軸正確呈現時間，我們先將 Date 設為 DataFrame 的 Index。
+            df_bmi_chart = df_plot[['Date', 'BMI']].copy()
+            df_bmi_chart['Date'] = df_bmi_chart['Date'].dt.strftime('%Y-%m-%d')  # 格式化日期標籤
+            df_bmi_chart = df_bmi_chart.set_index('Date')
+            st.line_chart(df_bmi_chart)
             
         with col_c2:
             st.write("**⚖️ 體重推移圖 (體重紀錄對比)**")
-            fig_weight_line = px.line(
-                df_plot, 
-                x='Date', 
-                y='Weight', 
-                title='體重歷史起伏曲線',
-                labels={'Date': '時間', 'Weight': '體重 (kg)'},
-                markers=True
-            )
-            fig_weight_line.update_traces(line_color='#FF5733') # 理由：使用不同色系進行區隔，增進視覺易讀性
-            st.plotly_chart(fig_weight_line, use_container_width=True)
+            # 理由：同上，使用原生折線圖，簡單且執行速度快，無須額外的 Plotly 繪圖資源。
+            df_weight_chart = df_plot[['Date', 'Weight']].copy()
+            df_weight_chart['Date'] = df_weight_chart['Date'].dt.strftime('%Y-%m-%d')
+            df_weight_chart = df_weight_chart.set_index('Date')
+            st.line_chart(df_weight_chart)
             
         st.divider()
         
@@ -331,17 +323,30 @@ with tab2:
         
         with col_pie:
             st.write("**🍕 體態分佈比例 (歷史健康狀態佔比)**")
-            status_df = df_plot['Status'].value_counts().reset_index()
-            status_df.columns = ['體態狀態', '次數']
+            # 理由：由於 Streamlit 無原生圓餅圖，故此處改為使用 Python 的 Matplotlib 函式庫來進行圓餅圖的繪製。
+            status_df = df_plot['Status'].value_counts()
             
-            fig_pie_chart = px.pie(
-                status_df, 
-                values='次數', 
-                names='體態狀態', 
-                title='歷史記錄體態判定比例',
-                hole=0.4  # 理由：Donut 甜甜圈圖外觀更具現代設計感
+            # 理由：Windows 系統中 Matplotlib 繪製中文標籤會出現方塊亂碼，因此手動載入「微軟正黑體」字型
+            plt.rcParams['font.sans-serif'] = ['Microsoft JhengHei']
+            plt.rcParams['axes.unicode_minus'] = False  # 解決負號 '-' 顯示為方塊的問題
+            
+            fig_pie, ax_pie = plt.subplots(figsize=(6, 4))
+            
+            # 理由：繪製圓餅圖，autopct 用於顯示百分比格式，startangle 用於旋轉角度。
+            # 使用 wedgeprops 調整寬度，可以將常規圓餅圖改造為更美觀的中空甜甜圈圖（Donut Chart）。
+            ax_pie.pie(
+                status_df.values, 
+                labels=status_df.index, 
+                autopct='%1.1f%%', 
+                startangle=140,
+                wedgeprops=dict(width=0.4, edgecolor='w')
             )
-            st.plotly_chart(fig_pie_chart, use_container_width=True)
+            
+            # 理由：將 Matplotlib 圖表的背景設為透明，與網頁的明亮/深色模式能有更好的適配度
+            fig_pie.patch.set_alpha(0.0)
+            ax_pie.patch.set_alpha(0.0)
+            
+            st.pyplot(fig_pie)
             
         with col_advice:
             st.write("**🩺 專屬健康管理建議**")
