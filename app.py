@@ -1,21 +1,20 @@
 # ==========================================
-# 專案名稱：自製BMI健康管理程式 (無 Plotly 本地版)
-# 目的：移除 Plotly 依賴，改用 Streamlit 原生圖表與 Matplotlib 繪製儀表板
+# 專案名稱：自製BMI健康管理程式 (現代網頁 UI 版)
+# 目的：使用 Streamlit 內建網頁元件替代 Tkinter，完美適配本地端與雲端環境
 # ==========================================
 
 # ------------------------------------------
 # 1. 匯入開發所需之標準函式庫與外部套件
 # ------------------------------------------
-import streamlit as st          # 目的：建構現代化、響應式的 Windows 本地端網頁 GUI 介面
-import pandas as pd             # 目的：高效處理與轉換二維表格數據，方便繪圖與匯出檔案
-import json                     # 目的：處理 JSON 格式的序列化與反序列化，用於完整保存與讀取專案
-import os                       # 目的：處理檔案系統路徑（如路徑合併、目錄存在檢查）
-from datetime import datetime   # 目的：取得當前系統時間，用於自動生成絕不重複的檔名
-import matplotlib.pyplot as plt # 目的：用於替代 Plotly 繪製體態比例分佈圖（圓餅圖）
+import streamlit as st          # 目的：建構現代化、響應式的網頁型 Windows 本地/雲端 GUI 介面
+import pandas as pd             # 目的：處理與轉換二維表格數據，進行資料排序與下載緩衝
+import json                     # 目的：解析上傳的 JSON 與封裝要下載的專案資料
+import os                       # 目的：處理檔案與路徑的基本判定（此版主要用於環境相容性檢查）
+import io                       # 目的：在不產生本地實體檔案的前提下，於記憶體中建立二進位資料流（Buffer）
+from datetime import datetime   # 目的：取得當前時間，自動生成絕不重複的下載檔名
+import matplotlib.pyplot as plt # 目的：用於繪製歷史健康狀態比例圖（圓餅圖）
 
-# 理由：在 Windows 本地運行時，Tkinter 能夠直接喚醒系統原生的「資料夾選取」與「檔案選取」對話框
-import tkinter as tk
-from tkinter import filedialog
+# 理由：已根據現代網頁開發規範，將 tkinter 與 filedialog 完全移除，避免執行緒衝突與防礙網頁運作。
 
 # ------------------------------------------
 # 2. 初始系統狀態設定 (Streamlit Session State)
@@ -24,53 +23,8 @@ from tkinter import filedialog
 if 'bmi_history' not in st.session_state:
     st.session_state['bmi_history'] = []  # 用途：存放當前所有的歷史紀錄數據（List of Dict）
 
-if 'selected_folder' not in st.session_state:
-    st.session_state['selected_folder'] = os.getcwd()  # 用途：記錄當前選定的儲存資料夾路徑，預設為當前程式執行路徑
-
-if 'selected_file' not in st.session_state:
-    st.session_state['selected_file'] = ""  # 用途：記錄當前選定要讀取的專案檔案路徑
-
 # ------------------------------------------
-# 3. 定義 Windows 原生對話框呼死函式 (Tkinter 整合)
-# ------------------------------------------
-def select_folder_via_dialog():
-    """
-    目的：喚醒 Windows 原生的資料夾選取視窗。
-    用途：讓使用者能以圖形化界面選擇儲存路徑。
-    理由：使用 -topmost 屬性將 Tkinter 視窗強制置於瀏覽器最前端，避免被遮擋，並在選取完畢後立即銷毀 root 以防記憶體殘留。
-    """
-    try:
-        root = tk.Tk()
-        root.withdraw()  # 隱藏主視窗，僅顯示對話框
-        root.wm_attributes('-topmost', 1)  # 強制將視窗置頂
-        folder_path = filedialog.askdirectory(master=root)
-        root.destroy()  # 銷毀視窗
-        return folder_path
-    except Exception as e:
-        # 理由：若在非 GUI 環境下運行，返回 None 避免程式崩潰
-        return None
-
-def select_file_via_dialog():
-    """
-    目的：喚醒 Windows 原生的檔案選取視窗。
-    用途：讓使用者直接點選要讀取的專案檔（副檔名限制為 .json）。
-    理由：透過 filetypes 限制使用者僅能選取 JSON 格式，減少因讀取錯誤格式而造成的當機風險。
-    """
-    try:
-        root = tk.Tk()
-        root.withdraw()
-        root.wm_attributes('-topmost', 1)
-        file_path = filedialog.askopenfilename(
-            master=root,
-            filetypes=[("JSON 專案檔", "*.json")]
-        )
-        root.destroy()  # 銷毀視窗
-        return file_path
-    except Exception as e:
-        return None
-
-# ------------------------------------------
-# 4. 核心計算與健康管理建議邏輯
+# 3. 核心計算與健康管理建議邏輯
 # ------------------------------------------
 def calculate_bmi(height_cm, weight_kg):
     """
@@ -111,14 +65,14 @@ def generate_health_advice(status, bmi):
         return f"您的 BMI 為 {bmi} ({status})。建議諮詢營養師，調整每日飲食總熱量，並循序漸進增加運動時間。"
 
 # ------------------------------------------
-# 5. 網頁介面排版 (Streamlit Windows UI)
+# 4. 網頁介面排版 (Streamlit Windows UI)
 # ------------------------------------------
 st.set_page_config(page_title="自製BMI健康管理系統", layout="wide")
 
 st.title("🛡️ 自製 BMI 健康管理程式 & 數據分析儀表板")
-st.caption("自主學習成果專案 - 提供 Windows 本地端原生檔案存取與高階資料分析儀表板。")
+st.caption("自主學習成果專案 - 使用網頁標準元件（File Uploader & Download Button）建置安全穩定的存取介面。")
 
-# 建立分頁標籤，切換「登錄與檔案管理」與「圖表儀表板」
+# 建立分頁標籤，切換「數據登錄與檔案管理」與「圖表儀表板」
 tab1, tab2 = st.tabs(["📝 數據登錄與專案管理", "📊 趨勢儀表板與健康建議"])
 
 # ==========================================
@@ -156,103 +110,92 @@ with tab1:
             st.success(f"已新增：{name_input} (BMI: {bmi_calc} / {status_calc})")
 
     # ------------------------------------------
-    # 5.2 專案檔案存取與匯出 (支援圖形化瀏覽)
+    # 5.2 專案檔案存取與匯出 (使用標準網頁 Uploader/Download 元件)
     # ------------------------------------------
     with col_file:
-        st.subheader("📁 專案儲存與讀取 (Windows UI 原生選取)")
+        st.subheader("📁 專案儲存與讀取 (標準網頁元件)")
         
-        # 理由：實作「讓使用者以輸入的方式選擇儲存資料夾路徑」與「可點選瀏覽」雙軌制
-        st.write("**1. 儲存路徑設定**")
-        col_dir_text, col_dir_btn = st.columns([3, 1])
-        with col_dir_text:
-            # 理由：允許手動直接輸入/貼上路徑
-            manual_dir = st.text_input(
-                "儲存資料夾路徑", 
-                value=st.session_state['selected_folder'],
-                label_visibility="collapsed"
-            )
-            st.session_state['selected_folder'] = manual_dir
-        with col_dir_btn:
-            # 理由：按下後開啟原生視窗選取資料夾並更新文字框內容
-            if st.button("📁 瀏覽...", use_container_width=True):
-                chosen_dir = select_folder_via_dialog()
-                if chosen_dir:
-                    st.session_state['selected_folder'] = chosen_dir
-                    st.rerun()  # 重新整理以更新顯示路徑
+        # [功能 4] 替代做法：使用 st.file_uploader 進行拖放讀取專案
+        # 理由：避免桌面程式的安全沙盒限制，使使用者可透過拖放直接載入歷史 JSON 檔案。
+        st.write("**1. 讀取現有專案 (.json)**")
+        uploaded_file = st.file_uploader(
+            "請上傳您先前儲存的 BMI 歷史紀錄 JSON 檔", 
+            type=["json"], 
+            key="json_uploader"
+        )
+        
+        # 理由：當使用者上傳檔案時，即時解析資料並覆寫至 Session State
+        if uploaded_file is not None:
+            try:
+                # 使用 json.load 讀取上傳檔案的 Bytes 內容
+                loaded_data = json.load(uploaded_file)
+                st.session_state['bmi_history'] = loaded_data
+                st.success("🎉 專案檔案載入成功！請前往第二分頁查看儀表板結果。")
+            except Exception as e:
+                st.error(f"檔案解析失敗，可能不是正確的專案格式：{e}")
 
-        # [功能 3] 按鈕：儲存專案 (不重複檔名)
-        if st.button("💾 儲存完整專案檔 (.json)", use_container_width=True):
-            target_dir = st.session_state['selected_folder']
-            if os.path.exists(target_dir):
-                # 理由：檔名格式為 bmi_project_YYYYMMDD_HHMMSS.json，因時間至秒級，每次儲存絕對不重複
-                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-                save_filename = f"bmi_project_{timestamp}.json"
-                save_path = os.path.join(target_dir, save_filename)
+        st.divider()
+
+        # [功能 3] 替代做法：使用 st.download_button 匯出專案
+        # 理由：伺服器無需得知使用者的磁碟路徑，由瀏覽器統一接管下載檔案儲存，符合 Web 標準。
+        # 檔名格式為 bmi_project_YYYYMMDD_HHMMSS.json，不重複檔名。
+        st.write("**2. 備份與下載目前專案**")
+        if st.session_state['bmi_history']:
+            # 將當前記憶體中的歷史數據封裝為 JSON 字串
+            json_project_data = json.dumps(st.session_state['bmi_history'], ensure_ascii=False, indent=4)
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            save_filename = f"bmi_project_{timestamp}.json"
+            
+            st.download_button(
+                label="💾 下載完整專案檔 (.json)",
+                data=json_project_data,
+                file_name=save_filename,
+                mime="application/json",
+                use_container_width=True
+            )
+        else:
+            # 理由：當前無資料時，將下載按鈕設為停用 (disabled)，防止下載到空檔案
+            st.button("💾 下載完整專案檔 (.json)", disabled=True, use_container_width=True, help="請先新增健康數據才能下載專案。")
+
+        st.divider()
+
+        # [功能 5] 替代做法：匯出 Excel 或 CSV (使用 st.download_button 於記憶體中串流下載)
+        # 理由：我們利用 BytesIO（二進位資料流）在記憶體中建立檔案內容，免除伺服器寫入硬碟的權限需求。
+        st.write("**3. 匯出 Excel / CSV 數據表格**")
+        export_mode = st.radio("選擇下載格式：", ["Excel (.xlsx)", "CSV (.csv)"], horizontal=True)
+        
+        if st.session_state['bmi_history']:
+            df_to_export = pd.DataFrame(st.session_state['bmi_history'])
+            timestamp_export = datetime.now().strftime("%Y%m%d_%H%M%S")
+            
+            if export_mode == "Excel (.xlsx)":
+                # 理由：使用 BytesIO 作為虛擬檔案緩衝區，pandas 輸出 Excel 需借助此機制進行記憶體寫入
+                buffer = io.BytesIO()
+                with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
+                    df_to_export.to_excel(writer, index=False, sheet_name='BMI紀錄')
                 
-                with open(save_path, 'w', encoding='utf-8') as f:
-                    json.dump(st.session_state['bmi_history'], f, ensure_ascii=False, indent=4)
-                st.success(f"專案儲存成功！檔名：{save_filename}")
+                excel_filename = f"bmi_data_{timestamp_export}.xlsx"
+                st.download_button(
+                    label="📥 下載 Excel 報表",
+                    data=buffer.getvalue(),
+                    file_name=excel_filename,
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    use_container_width=True
+                )
             else:
-                st.error("儲存資料夾路徑無效，請重新檢查。")
-
-        st.divider()
-
-        # [功能 4]：讀取檔案 (使用選擇檔案的方式)
-        st.write("**2. 讀取現有專案**")
-        col_file_text, col_file_btn = st.columns([3, 1])
-        with col_file_text:
-            # 理由：不可編輯，僅用於顯示使用者透過對話框選取的文件完整路徑
-            st.text_input(
-                "已選擇的專案檔案", 
-                value=st.session_state['selected_file'],
-                disabled=True,
-                label_visibility="collapsed"
-            )
-        with col_file_btn:
-            # 理由：符合「讀取檔案也是用選擇檔案的方式」
-            if st.button("🔍 瀏覽檔案...", use_container_width=True):
-                chosen_file = select_file_via_dialog()
-                if chosen_file:
-                    st.session_state['selected_file'] = chosen_file
-                    st.rerun()
-
-        if st.button("📂 載入選定檔案", use_container_width=True):
-            file_to_load = st.session_state['selected_file']
-            if file_to_load and os.path.exists(file_to_load):
-                with open(file_to_load, 'r', encoding='utf-8') as f:
-                    st.session_state['bmi_history'] = json.load(f)
-                st.success(f"已成功載入專案！檔案：{os.path.basename(file_to_load)}")
-            else:
-                st.error("請先點擊上方『瀏覽檔案』選擇有效的專案檔。")
-
-        st.divider()
-
-        # [功能 5]：儲存所有資料為 Excel (.xlsx) 或 CSV
-        st.write("**3. 匯出 Excel / CSV 表格**")
-        export_mode = st.radio("選擇匯出格式：", ["Excel (.xlsx)", "CSV (.csv)"], horizontal=True)
-        if st.button("📥 匯出資料", use_container_width=True):
-            if not st.session_state['bmi_history']:
-                st.error("無任何歷史數據可供匯出！")
-            else:
-                target_dir = st.session_state['selected_folder']
-                if os.path.exists(target_dir):
-                    df_to_export = pd.DataFrame(st.session_state['bmi_history'])
-                    timestamp_export = datetime.now().strftime("%Y%m%d_%H%M%S")
-                    
-                    if export_mode == "Excel (.xlsx)":
-                        export_filename = f"bmi_data_{timestamp_export}.xlsx"
-                        export_path = os.path.join(target_dir, export_filename)
-                        # 理由：pandas 輸出 Excel 需要 openpyxl 套件
-                        df_to_export.to_excel(export_path, index=False)
-                    else:
-                        export_filename = f"bmi_data_{timestamp_export}.csv"
-                        export_path = os.path.join(target_dir, export_filename)
-                        # 理由：utf-8-sig 能防止中文在 Windows Excel 中開啟時發生亂碼
-                        df_to_export.to_csv(export_path, index=False, encoding='utf-8-sig')
-                        
-                    st.success(f"匯出成功！檔案存放在：\n{export_path}")
-                else:
-                    st.error("指定的儲存資料夾路徑不存在。")
+                # 理由：CSV 是文字檔案，可直接利用 string 處理。
+                # utf-8-sig 的 BOM 編碼能使 Windows Excel 在開啟此 CSV 時完美呈現中文，不會有亂碼
+                csv_data_string = df_to_export.to_csv(index=False, encoding='utf-8-sig')
+                csv_filename = f"bmi_data_{timestamp_export}.csv"
+                st.download_button(
+                    label="📥 下載 CSV 報表",
+                    data=csv_data_string,
+                    file_name=csv_filename,
+                    mime="text/csv",
+                    use_container_width=True
+                )
+        else:
+            st.button("📥 下載報表資料", disabled=True, use_container_width=True, help="請先新增健康數據才能匯出資料。")
 
     # ------------------------------------------
     # 5.3 數據清單表格呈現
@@ -264,18 +207,18 @@ with tab1:
             st.session_state['bmi_history'] = []
             st.rerun()
     else:
-        st.info("尚無資料。請於左側登錄數據，或於右側載入歷史專案檔。")
+        st.info("尚無資料。請於左側登錄數據，或於右側上傳 JSON 專案檔。")
 
 
 # ==========================================
 # TAB 2：趨勢儀表板與健康建議
 # ==========================================
 with tab2:
-    st.subheader("📊 歷史健康數據 Dashboard (標準圖表)")
+    st.subheader("📊 歷史健康數據 Dashboard")
     
     # 理由：若無資料，繪圖引擎會報錯，故以條件式分支提示使用者先登錄數據
     if not st.session_state['bmi_history']:
-        st.warning("目前無任何資料，請先新增或讀取檔案以生成分析圖表。")
+        st.warning("目前無任何資料，請先新增數據或在第一分頁上傳專案檔案以生成分析圖表。")
     else:
         # 將資料轉換為 DataFrame 並進行日期型態轉換與排序，確保時序圖顯示正確
         df_plot = pd.DataFrame(st.session_state['bmi_history'])
@@ -301,16 +244,16 @@ with tab2:
         
         with col_c1:
             st.write("**📈 BMI 趨勢分析 (BMI 變化曲線)**")
-            # 理由：為配合移除 Plotly 的要求，我們使用 Streamlit 的原生 st.line_chart 元件。
-            # 為了讓 X 軸正確呈現時間，我們先將 Date 設為 DataFrame 的 Index。
+            # 理由：使用 Streamlit 內建 st.line_chart。
+            # 先將 Date 轉為字串格式再設為 Index，確保 X 軸標籤在畫面上乾淨整齊。
             df_bmi_chart = df_plot[['Date', 'BMI']].copy()
-            df_bmi_chart['Date'] = df_bmi_chart['Date'].dt.strftime('%Y-%m-%d')  # 格式化日期標籤
+            df_bmi_chart['Date'] = df_bmi_chart['Date'].dt.strftime('%Y-%m-%d')
             df_bmi_chart = df_bmi_chart.set_index('Date')
             st.line_chart(df_bmi_chart)
             
         with col_c2:
             st.write("**⚖️ 體重推移圖 (體重紀錄對比)**")
-            # 理由：同上，使用原生折線圖，簡單且執行速度快，無須額外的 Plotly 繪圖資源。
+            # 理由：同上，不引用 Plotly，改以原生折線圖繪製體重走勢。
             df_weight_chart = df_plot[['Date', 'Weight']].copy()
             df_weight_chart['Date'] = df_weight_chart['Date'].dt.strftime('%Y-%m-%d')
             df_weight_chart = df_weight_chart.set_index('Date')
@@ -323,7 +266,6 @@ with tab2:
         
         with col_pie:
             st.write("**🍕 體態分佈比例 (歷史健康狀態佔比)**")
-            # 理由：由於 Streamlit 無原生圓餅圖，故此處改為使用 Python 的 Matplotlib 函式庫來進行圓餅圖的繪製。
             status_df = df_plot['Status'].value_counts()
             
             # 理由：Windows 系統中 Matplotlib 繪製中文標籤會出現方塊亂碼，因此手動載入「微軟正黑體」字型
@@ -333,7 +275,7 @@ with tab2:
             fig_pie, ax_pie = plt.subplots(figsize=(6, 4))
             
             # 理由：繪製圓餅圖，autopct 用於顯示百分比格式，startangle 用於旋轉角度。
-            # 使用 wedgeprops 調整寬度，可以將常規圓餅圖改造為更美觀的中空甜甜圈圖（Donut Chart）。
+            # 使用 wedgeprops 調整寬度，可以將常規圓餅圖改造為中空甜甜圈圖（Donut Chart）。
             ax_pie.pie(
                 status_df.values, 
                 labels=status_df.index, 
@@ -342,7 +284,7 @@ with tab2:
                 wedgeprops=dict(width=0.4, edgecolor='w')
             )
             
-            # 理由：將 Matplotlib 圖表的背景設為透明，與網頁的明亮/深色模式能有更好的適配度
+            # 理由：將 Matplotlib 圖表的背景設為透明，在明亮或深色主題網頁背景下都不會突兀。
             fig_pie.patch.set_alpha(0.0)
             ax_pie.patch.set_alpha(0.0)
             
